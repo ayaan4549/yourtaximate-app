@@ -106,13 +106,15 @@ export default function App() {
   const [driverFullNameInput, setDriverFullNameInput] = useState("John Driver");
   const [driverAuthTab, setDriverAuthTab] = useState<"signin" | "signup">("signin");
 
-  // ── Real Supabase data (replaces localStorage / seed data) ──────────────────
+  // ── Real Supabase data — bookings, trips, expenses, settings from real tables ─
   const {
     bookings: globalBookings,
     setBookings: setGlobalBookings,
     trips: globalTrips,
     setTrips: setGlobalTrips,
     expenses: globalExpenses,
+    settings: dbSettings,
+    setSettings: setDbSettings,
     addBooking: handleAddBookingDB,
     deleteBooking: handleDeleteBookingDB,
     updateBooking: handleUpdateBookingDB,
@@ -123,15 +125,23 @@ export default function App() {
     deleteExpense: handleDeleteExpenseDB,
   } = useDriverData(session?.user?.id ?? null);
 
-  // Settings stored locally (preferences, not operational data)
-  const [globalSettings, setGlobalSettings] = useState<AppSettings>(() => {
+  // globalSettings merges DB data (profile, rates, vehicle) with local prefs (dark mode, templates)
+  const [localPrefs, setLocalPrefs] = useState<AppSettings>(() => {
     const cached = localStorage.getItem("farefreedom_settings_cache");
     return cached ? JSON.parse(cached) : DEFAULT_SETTINGS;
   });
 
-  useEffect(() => {
-    localStorage.setItem("farefreedom_settings_cache", JSON.stringify(globalSettings));
-  }, [globalSettings]);
+  const globalSettings: AppSettings = { ...localPrefs, ...dbSettings,
+    profile: dbSettings.profile,
+    rates: dbSettings.rates,
+  };
+
+  const setGlobalSettings = (updater: AppSettings | ((prev: AppSettings) => AppSettings)) => {
+    const next = typeof updater === "function" ? updater(globalSettings) : updater;
+    setLocalPrefs(next);
+    setDbSettings(next);
+    localStorage.setItem("farefreedom_settings_cache", JSON.stringify(next));
+  };
 
   // Booking states
   const [pickup, setPickup] = useState<Landmark | null>(null);

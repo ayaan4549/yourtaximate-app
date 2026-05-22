@@ -1,105 +1,149 @@
-import { Booking, Trip, Expense } from "../types";
-import { DBRide } from "./supabase";
+import { Booking, Trip, Expense, AppSettings } from "../types";
 
-// ── Pence ↔ GBP ───────────────────────────────────────────────────────────────
-export const penceToGbp = (pence: number) => parseFloat((pence / 100).toFixed(2));
-export const gbpToPence = (gbp: number) => Math.round(gbp * 100);
-
-// ── DB Ride → Booking (pending / active rides) ────────────────────────────────
-export function dbRideToBooking(ride: DBRide & Record<string, any>): Booking {
+// ── bookings table → Booking ──────────────────────────────────────────────────
+export function dbBookingToBooking(row: Record<string, any>): Booking {
   return {
-    id: ride.id,
-    customerName: ride.customer_name || "Unknown Passenger",
-    companyName:  ride.company_name  || "",
-    phone:        ride.customer_phone || "",
-    countryCode:  "+44",
-    pickupAddress:       ride.pickup_address,
-    destinationAddress:  ride.dropoff_address,
-    dateTime:     ride.created_at,
-    distanceMiles: ride.distance_miles,
-    fareGbp:      penceToGbp(ride.fare_estimate),
-    flightNumber:  ride.flight_number || "",
-    meetAndGreet:  ride.extra_meet_greet,
-    childSeat:     ride.extra_child_seat,
-    returnJourney: ride.return_journey || false,
-    status: (ride.status === "requested" || ride.status === "accepted") ? "pending" : "in_progress",
+    id:                 row.id,
+    customerName:       row.customer_name   || "",
+    companyName:        row.company_name    || "",
+    phone:              row.customer_phone  || "",
+    countryCode:        "+44",
+    pickupAddress:      row.pickup_address,
+    destinationAddress: row.destination_address,
+    dateTime:           row.pickup_datetime,
+    distanceMiles:      parseFloat(row.distance_miles) || 0,
+    fareGbp:            parseFloat(row.estimated_fare) || 0,
+    flightNumber:       row.flight_number   || "",
+    meetAndGreet:       row.meet_and_greet  || false,
+    childSeat:          row.child_seat      || false,
+    returnJourney:      false,
+    status:             row.status === "in_progress" ? "in_progress" : "pending",
   };
 }
 
-// ── DB Ride → Trip (completed rides) ─────────────────────────────────────────
-export function dbRideToTrip(ride: DBRide & Record<string, any>): Trip {
-  return {
-    id: ride.id,
-    customerName:       ride.customer_name || "Unknown Passenger",
-    pickupAddress:      ride.pickup_address,
-    destinationAddress: ride.dropoff_address,
-    distanceMiles:      ride.distance_miles,
-    fareGbp:            penceToGbp(ride.fare_final ?? ride.fare_estimate),
-    paymentMethod:      ride.payment_method || "cash",
-    dateTime:           ride.created_at,
-    mode:               ride.trip_mode || "Prebook",
-  };
-}
-
-// ── Booking → DB ride insert payload ─────────────────────────────────────────
+// ── Booking → bookings insert payload ────────────────────────────────────────
 export function bookingToDBInsert(
   booking: Omit<Booking, "id">,
-  passengerId: string
-): Omit<DBRide, "id" | "created_at" | "fare_final" | "driver_id"> & Record<string, any> {
+  driverId: string
+): Record<string, any> {
   return {
-    passenger_id:     passengerId,
-    pickup_address:   booking.pickupAddress,
-    dropoff_address:  booking.destinationAddress,
-    pickup_lat:       0,
-    pickup_lng:       0,
-    dropoff_lat:      0,
-    dropoff_lng:      0,
-    distance_miles:   booking.distanceMiles,
-    duration_minutes: Math.ceil(booking.distanceMiles * 2.4 + 4),
-    fare_estimate:    gbpToPence(booking.fareGbp),
-    status:           "requested" as const,
-    extra_child_seat: booking.childSeat,
-    extra_meet_greet: booking.meetAndGreet,
-    is_night_rate:    false,
-    customer_name:    booking.customerName,
-    customer_phone:   booking.phone,
-    company_name:     booking.companyName,
-    flight_number:    booking.flightNumber,
-    return_journey:   booking.returnJourney,
-    trip_mode:        "Prebook",
+    driver_id:           driverId,
+    customer_name:       booking.customerName,
+    customer_phone:      booking.phone,
+    company_name:        booking.companyName,
+    pickup_address:      booking.pickupAddress,
+    destination_address: booking.destinationAddress,
+    pickup_datetime:     booking.dateTime,
+    distance_miles:      booking.distanceMiles,
+    estimated_fare:      booking.fareGbp,
+    flight_number:       booking.flightNumber,
+    meet_and_greet:      booking.meetAndGreet,
+    child_seat:          booking.childSeat,
+    status:              "pending",
   };
 }
 
-// ── DB Expense type ───────────────────────────────────────────────────────────
-export interface DBExpense {
-  id: string;
-  driver_id: string;
-  type: Expense["type"];
-  amount_pence: number;
-  description: string | null;
-  created_at: string;
-}
-
-// ── DB Expense → App Expense ──────────────────────────────────────────────────
-export function dbExpenseToExpense(e: DBExpense): Expense {
+// ── Booking → bookings update payload ────────────────────────────────────────
+export function bookingToDBUpdate(booking: Booking): Record<string, any> {
   return {
-    id:          e.id,
-    type:        e.type,
-    amount:      penceToGbp(e.amount_pence),
-    description: e.description || e.type,
-    dateTime:    e.created_at,
+    customer_name:       booking.customerName,
+    customer_phone:      booking.phone,
+    company_name:        booking.companyName,
+    pickup_address:      booking.pickupAddress,
+    destination_address: booking.destinationAddress,
+    pickup_datetime:     booking.dateTime,
+    distance_miles:      booking.distanceMiles,
+    estimated_fare:      booking.fareGbp,
+    flight_number:       booking.flightNumber,
+    meet_and_greet:      booking.meetAndGreet,
+    child_seat:          booking.childSeat,
+    updated_at:          new Date().toISOString(),
   };
 }
 
-// ── App Expense → DB insert payload ──────────────────────────────────────────
+// ── trips table → Trip ────────────────────────────────────────────────────────
+export function dbTripToTrip(row: Record<string, any>): Trip {
+  return {
+    id:                 row.id,
+    customerName:       row.customer_name       || "",
+    pickupAddress:      row.pickup_address,
+    destinationAddress: row.destination_address,
+    distanceMiles:      parseFloat(row.distance_miles) || 0,
+    fareGbp:            parseFloat(row.fare_amount)    || 0,
+    paymentMethod:      row.payment_method      || "cash",
+    dateTime:           row.trip_date,
+    mode:               row.trip_type === "meter" ? "Meter" : "Prebook",
+  };
+}
+
+// ── Trip → trips insert payload ───────────────────────────────────────────────
+export function tripToDBInsert(
+  trip: Trip,
+  driverId: string,
+  bookingId?: string
+): Record<string, any> {
+  return {
+    driver_id:           driverId,
+    booking_id:          bookingId || null,
+    trip_type:           trip.mode === "Meter" ? "meter" : "prebook",
+    customer_name:       trip.customerName,
+    pickup_address:      trip.pickupAddress,
+    destination_address: trip.destinationAddress,
+    distance_miles:      trip.distanceMiles,
+    fare_amount:         trip.fareGbp,
+    payment_method:      trip.paymentMethod,
+    trip_date:           trip.dateTime,
+  };
+}
+
+// ── expenses table → Expense ──────────────────────────────────────────────────
+export function dbExpenseToExpense(row: Record<string, any>): Expense {
+  return {
+    id:          row.id,
+    type:        row.expense_type as Expense["type"],
+    amount:      parseFloat(row.amount) || 0,
+    description: row.description || row.expense_type,
+    dateTime:    row.expense_date,
+  };
+}
+
+// ── Expense → expenses insert payload ────────────────────────────────────────
 export function expenseToDBInsert(
   expense: Omit<Expense, "id" | "dateTime">,
   driverId: string
-): Omit<DBExpense, "id" | "created_at"> {
+): Record<string, any> {
   return {
     driver_id:    driverId,
-    type:         expense.type,
-    amount_pence: gbpToPence(expense.amount),
+    expense_type: expense.type,
+    amount:       expense.amount,
     description:  expense.description,
+    expense_date: new Date().toISOString(),
+  };
+}
+
+// ── profiles + driver_settings + vehicle_health → AppSettings ────────────────
+export function dbRowsToSettings(
+  profile: Record<string, any> | null,
+  settings: Record<string, any> | null,
+  vehicle: Record<string, any> | null,
+  current: AppSettings
+): AppSettings {
+  return {
+    ...current,
+    profile: {
+      fullName:      profile?.full_name     || current.profile.fullName,
+      contactNumber: profile?.phone         || current.profile.contactNumber,
+      vehicleMake:   vehicle?.vehicle_make  || current.profile.vehicleMake,
+      vehicleModel:  vehicle?.vehicle_model || current.profile.vehicleModel,
+      vehicleReg:    vehicle?.vehicle_registration || current.profile.vehicleReg,
+      vehicleColor:  vehicle?.vehicle_color || current.profile.vehicleColor,
+    },
+    rates: {
+      baseFare:          parseFloat(settings?.base_fare)           || current.rates.baseFare,
+      perMileRate:       parseFloat(settings?.per_mile_rate)       || current.rates.perMileRate,
+      perMinuteRate:     parseFloat(settings?.per_minute_rate)     || current.rates.perMinuteRate,
+      meetGreetFee:      parseFloat(settings?.meet_and_greet_fee)  || current.rates.meetGreetFee,
+      airportTollCharge: parseFloat(settings?.airport_toll_charge) || current.rates.airportTollCharge,
+    },
   };
 }

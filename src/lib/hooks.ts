@@ -32,13 +32,22 @@ export function useUserProfile(userId: string | null) {
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
+    // Real schema uses "profiles" table (created by Lovable)
     supabase
-      .from("users")
-      .select("*")
+      .from("profiles")
+      .select("id, full_name, phone")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
-        setProfile(data);
+        if (data) {
+          setProfile({
+            id: data.id,
+            phone: data.phone || "",
+            role: "driver",
+            full_name: data.full_name,
+            created_at: "",
+          });
+        }
         setLoading(false);
       });
   }, [userId]);
