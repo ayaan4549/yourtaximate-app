@@ -30,8 +30,9 @@ import { DriverPortal } from "./components/DriverPortal";
 import { CustomerPortal } from "./components/CustomerPortal";
 import { supabase } from "./lib/supabase";
 import { useSupabaseSession, useUserProfile, signOut } from "./lib/hooks";
-import { Booking, Trip, AppSettings } from "./types";
-import { DEFAULT_SETTINGS, SEED_BOOKINGS, SEED_TRIPS } from "./utils/seedData";
+import { useDriverData } from "./lib/useDriverData";
+import { AppSettings } from "./types";
+import { DEFAULT_SETTINGS } from "./utils/seedData";
 
 // Pricing and regulatory structural constraints 
 const VEHICLE_TIERS = [
@@ -105,29 +106,28 @@ export default function App() {
   const [driverFullNameInput, setDriverFullNameInput] = useState("John Driver");
   const [driverAuthTab, setDriverAuthTab] = useState<"signin" | "signup">("signin");
 
-  // Shared synchronized states between Customer and Driver views
-  const [globalBookings, setGlobalBookings] = useState<Booking[]>(() => {
-    const cached = localStorage.getItem("farefreedom_bookings_cache");
-    return cached ? JSON.parse(cached) : SEED_BOOKINGS;
-  });
+  // ── Real Supabase data (replaces localStorage / seed data) ──────────────────
+  const {
+    bookings: globalBookings,
+    setBookings: setGlobalBookings,
+    trips: globalTrips,
+    setTrips: setGlobalTrips,
+    expenses: globalExpenses,
+    addBooking: handleAddBookingDB,
+    deleteBooking: handleDeleteBookingDB,
+    updateBooking: handleUpdateBookingDB,
+    completeBooking: handleCompleteBookingDB,
+    saveTrip: handleSaveTripDB,
+    deleteTrip: handleDeleteTripDB,
+    addExpense: handleAddExpenseDB,
+    deleteExpense: handleDeleteExpenseDB,
+  } = useDriverData(session?.user?.id ?? null);
 
-  const [globalTrips, setGlobalTrips] = useState<Trip[]>(() => {
-    const cached = localStorage.getItem("farefreedom_trips_cache");
-    return cached ? JSON.parse(cached) : SEED_TRIPS;
-  });
-
+  // Settings stored locally (preferences, not operational data)
   const [globalSettings, setGlobalSettings] = useState<AppSettings>(() => {
     const cached = localStorage.getItem("farefreedom_settings_cache");
     return cached ? JSON.parse(cached) : DEFAULT_SETTINGS;
   });
-
-  useEffect(() => {
-    localStorage.setItem("farefreedom_bookings_cache", JSON.stringify(globalBookings));
-  }, [globalBookings]);
-
-  useEffect(() => {
-    localStorage.setItem("farefreedom_trips_cache", JSON.stringify(globalTrips));
-  }, [globalTrips]);
 
   useEffect(() => {
     localStorage.setItem("farefreedom_settings_cache", JSON.stringify(globalSettings));
@@ -803,12 +803,21 @@ export default function App() {
         ) : (
           <div className="space-y-8 animate-fade-in">
             {userRoleChoice === "driver" ? (
-              <DriverPortal 
-                onAddParsedBooking={handleTaxiMateParsedUpdate} 
+              <DriverPortal
+                onAddParsedBooking={handleTaxiMateParsedUpdate}
                 bookings={globalBookings}
                 setBookings={setGlobalBookings}
                 trips={globalTrips}
                 setTrips={setGlobalTrips}
+                expenses={globalExpenses}
+                onAddBooking={handleAddBookingDB}
+                onDeleteBooking={handleDeleteBookingDB}
+                onUpdateBooking={handleUpdateBookingDB}
+                onCompleteBooking={handleCompleteBookingDB}
+                onSaveTrip={handleSaveTripDB}
+                onDeleteTrip={handleDeleteTripDB}
+                onAddExpense={handleAddExpenseDB}
+                onDeleteExpense={handleDeleteExpenseDB}
                 settings={globalSettings}
                 setSettings={setGlobalSettings}
               />
