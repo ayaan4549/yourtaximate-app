@@ -1,0 +1,6 @@
+{
+  "name": "Your Taxi Mate",
+  "description": "YourTaxiMate now features the complete FareFreedom mobile-first driver management suite (Dashboard, Meter, Booking calendar, automated SMS verification, and UK HMRC tax calculators) alongside Passenger safe-transit self-service.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
