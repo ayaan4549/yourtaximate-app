@@ -47,9 +47,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
-    <!-- Push Notifications (booking alerts) -->
+    <!-- Push Notifications: add back when Firebase is configured
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    -->
 
     <!-- Vibration (haptic feedback on booking confirmation) -->
     <uses-permission android:name="android.permission.VIBRATE" />

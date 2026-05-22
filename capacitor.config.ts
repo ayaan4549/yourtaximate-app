@@ -26,7 +26,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: "#1e293b",   // Slate-900 — matches app header
+      backgroundColor: "#1e293b",
       androidSplashResourceName: "splash",
       showSpinner: false,
     },
@@ -36,13 +36,10 @@ const config: CapacitorConfig = {
       backgroundColor: "#1e293b",
     },
 
-    PushNotifications: {
-      presentationOptions: ["badge", "sound", "alert"],
-    },
+    // PushNotifications removed — requires Firebase setup (google-services.json)
+    // Add back when Firebase project is configured
 
-    Geolocation: {
-      // Required for live GPS tracking of driver location
-    },
+    Geolocation: {},
 
     Keyboard: {
       resize: "body",
