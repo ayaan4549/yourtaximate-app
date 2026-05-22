@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { 
-  Car, 
-  MapPin, 
-  Navigation, 
-  Clock, 
-  AlertCircle, 
-  CheckCircle2, 
-  Sparkles, 
-  ShieldAlert, 
-  ArrowRight, 
-  TrendingUp, 
-  HeartHandshake, 
-  Briefcase, 
-  Smartphone, 
-  KeyRound, 
+import {
+  Car,
+  MapPin,
+  Navigation,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  Sparkles,
+  ShieldAlert,
+  ArrowRight,
+  TrendingUp,
+  HeartHandshake,
+  Briefcase,
+  Smartphone,
+  KeyRound,
   LogOut,
   Star,
   BookOpen,
@@ -28,6 +28,8 @@ import { MapSimulator, LONDON_LANDMARKS, Landmark, calculateHaversineDistance } 
 import { DocPanel } from "./components/DocPanel";
 import { DriverPortal } from "./components/DriverPortal";
 import { CustomerPortal } from "./components/CustomerPortal";
+import { supabase } from "./lib/supabase";
+import { useSupabaseSession, useUserProfile, signOut } from "./lib/hooks";
 import { Booking, Trip, AppSettings } from "./types";
 import { DEFAULT_SETTINGS, SEED_BOOKINGS, SEED_TRIPS } from "./utils/seedData";
 
@@ -59,26 +61,32 @@ export default function App() {
     setCurrentPath(path);
   };
 
-  // Auth state simulations
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // ── Real Supabase auth ────────────────────────────────────────────────────────
+  const { session, loading: sessionLoading } = useSupabaseSession();
+  const isAuthenticated = !!session;
+  const { profile } = useUserProfile(session?.user?.id ?? null);
+
+  // Derive role from DB profile; fall back to driver for the main workspace
   const [userRoleChoice, setUserRoleChoice] = useState<"customer" | "driver" | null>(null);
 
   useEffect(() => {
-    if (currentPath.startsWith("/book")) {
+    if (profile) {
+      setUserRoleChoice(profile.role === "passenger" ? "customer" : "driver");
+    } else if (currentPath.startsWith("/book")) {
       setUserRoleChoice("customer");
-    } else if (currentPath === "/auth" || currentPath === "/dashboard") {
-      setUserRoleChoice("driver");
     }
-  }, [currentPath]);
+  }, [profile, currentPath]);
 
   // Auto-redirect unauthenticated dashboard visits to auth, and logged-in to dashboard
   useEffect(() => {
-    if (!isAuthenticated && currentPath === "/dashboard") {
-      navigate("/auth");
-    } else if (isAuthenticated && currentPath === "/auth") {
-      navigate("/dashboard");
+    if (!sessionLoading) {
+      if (!isAuthenticated && currentPath === "/dashboard") {
+        navigate("/auth");
+      } else if (isAuthenticated && currentPath === "/auth") {
+        navigate("/dashboard");
+      }
     }
-  }, [isAuthenticated, currentPath]);
+  }, [isAuthenticated, sessionLoading, currentPath]);
 
   const isBookPath = currentPath.startsWith("/book");
   const isDashboardPath = currentPath === "/dashboard";
@@ -190,38 +198,47 @@ export default function App() {
 
   const activeFare = calculateFareGbp(selectedTier);
 
-  // Auth flow mock
-  const handleRequestOtp = (e: React.FormEvent) => {
+  // ── Real Supabase phone OTP auth ─────────────────────────────────────────────
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneNumber.replace(/\s/g, "").match(/^\+44\d{10}$/)) {
+    const cleaned = phoneNumber.replace(/\s/g, "");
+    if (!cleaned.match(/^\+44\d{10}$/)) {
       setAuthError("Please input a valid UK phone number (+44 followed by 10 digits)");
       return;
     }
     setAuthError("");
     setIsLoadingAuth(true);
-    setTimeout(() => {
-      setIsLoadingAuth(false);
+    const { error } = await supabase.auth.signInWithOtp({ phone: cleaned });
+    setIsLoadingAuth(false);
+    if (error) {
+      setAuthError(error.message);
+    } else {
       setAuthStage("otp");
-    }, 800);
+    }
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otpCode.length !== 6) {
-      setAuthError("UK Privat Hire SMS OTP must be 6 digits.");
+      setAuthError("OTP must be 6 digits.");
       return;
     }
     setAuthError("");
     setIsLoadingAuth(true);
-    setTimeout(() => {
-      setIsLoadingAuth(false);
-      setIsAuthenticated(true);
-      setUserRoleChoice("customer");
+    const cleaned = phoneNumber.replace(/\s/g, "");
+    const { error } = await supabase.auth.verifyOtp({
+      phone: cleaned,
+      token: otpCode,
+      type: "sms",
+    });
+    setIsLoadingAuth(false);
+    if (error) {
+      setAuthError(error.message);
+    } else {
       setActiveTab("customer");
-      // Pre-select Heathrow and Buckingham Palace to help user query fast!
       setPickup(LONDON_LANDMARKS[0]);
       setDropoff(LONDON_LANDMARKS[1]);
-    }, 1000);
+    }
   };
 
   // Dispatch live simulation state flow
@@ -261,7 +278,28 @@ export default function App() {
     setDropoff(null);
   };
 
+  // Sync real profile name into local settings when profile loads
+  useEffect(() => {
+    if (profile?.full_name) {
+      setGlobalSettings(prev => ({
+        ...prev,
+        profile: { ...prev.profile, fullName: profile.full_name! },
+      }));
+    }
+  }, [profile]);
+
   const isDarkTheme = false;
+
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Loading YourTaxiMate...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${
@@ -283,8 +321,8 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <span className="hidden md:inline-block text-xs font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md">STATUS: VERIFIED</span>
                 <button
-                  onClick={() => {
-                    setIsAuthenticated(false);
+                  onClick={async () => {
+                    await signOut();
                     setUserRoleChoice(null);
                     setPhoneNumber("+44 ");
                     setOtpCode("");
@@ -525,7 +563,7 @@ export default function App() {
 
                 {driverAuthTab === "signin" ? (
                   /* SIGN IN FORM BLOCK */
-                  <form onSubmit={(e) => {
+                  <form onSubmit={async (e) => {
                     e.preventDefault();
                     if (!driverEmailInput.trim()) {
                       setAuthError("Email address is required.");
@@ -537,26 +575,17 @@ export default function App() {
                     }
                     setIsLoadingAuth(true);
                     setAuthError("");
-                    
-                    setTimeout(() => {
-                      setIsLoadingAuth(false);
-                      setIsAuthenticated(true);
+                    const { error } = await supabase.auth.signInWithPassword({
+                      email: driverEmailInput,
+                      password: driverPasswordInput,
+                    });
+                    setIsLoadingAuth(false);
+                    if (error) {
+                      setAuthError(error.message);
+                    } else {
                       setUserRoleChoice("driver");
                       setActiveTab("driver");
-                      // Optionally update profile details using default or entered email if requested
-                      const emailPrefix = driverEmailInput.split("@")[0];
-                      const formattedName = emailPrefix
-                        ? emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1) + " Driver"
-                        : "Partner Driver";
-                      
-                      setGlobalSettings(prev => ({
-                        ...prev,
-                        profile: {
-                          ...prev.profile,
-                          fullName: formattedName
-                        }
-                      }));
-                    }, 1000);
+                    }
                   }} className="space-y-4">
                     
                     <div>
@@ -613,7 +642,7 @@ export default function App() {
                   </form>
                 ) : (
                   /* SIGN UP FORM BLOCK */
-                  <form onSubmit={(e) => {
+                  <form onSubmit={async (e) => {
                     e.preventDefault();
                     if (!driverFullNameInput.trim()) {
                       setAuthError("Full Name is required.");
@@ -623,29 +652,51 @@ export default function App() {
                       setAuthError("Email is required.");
                       return;
                     }
+                    if (!driverPasswordInput.trim()) {
+                      setAuthError("Password is required.");
+                      return;
+                    }
                     if (!driverMobileInput.trim()) {
                       setAuthError("Mobile Number is required.");
                       return;
                     }
                     setIsLoadingAuth(true);
                     setAuthError("");
-                    
-                    setTimeout(() => {
-                      setIsLoadingAuth(false);
-                      setIsAuthenticated(true);
+                    const { data, error } = await supabase.auth.signUp({
+                      email: driverEmailInput,
+                      password: driverPasswordInput,
+                      options: {
+                        data: {
+                          full_name: driverFullNameInput,
+                          phone: driverMobileInput,
+                          role: "driver",
+                        },
+                      },
+                    });
+                    if (!error && data.user) {
+                      // Insert into public.users
+                      await supabase.from("users").upsert({
+                        id: data.user.id,
+                        phone: driverMobileInput,
+                        full_name: driverFullNameInput,
+                        role: "driver",
+                      });
+                    }
+                    setIsLoadingAuth(false);
+                    if (error) {
+                      setAuthError(error.message);
+                    } else {
                       setUserRoleChoice("driver");
                       setActiveTab("driver");
-                      
-                      // Inject the registered driver details into profile state
                       setGlobalSettings(prev => ({
                         ...prev,
                         profile: {
                           ...prev.profile,
                           fullName: driverFullNameInput,
-                          contactNumber: driverMobileInput
-                        }
+                          contactNumber: driverMobileInput,
+                        },
                       }));
-                    }, 1000);
+                    }
                   }} className="space-y-4">
                     
                     <div>
@@ -734,24 +785,13 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Developer Quick-bypass */}
+                {/* Developer Quick-bypass — use real sign-in in production */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsAuthenticated(true);
-                    setUserRoleChoice("driver");
-                    setActiveTab("driver");
-                    setDriverFullNameInput("Partner Driver");
-                    setDriverMobileInput("+44 7700 900077");
-                    // Trigger state refresh
-                    setGlobalSettings(prev => ({
-                      ...prev,
-                      profile: {
-                        ...prev.profile,
-                        fullName: "Partner Driver",
-                        contactNumber: "+44 7700 900077"
-                      }
-                    }));
+                  onClick={async () => {
+                    setDriverEmailInput("driver@example.com");
+                    setDriverPasswordInput("password");
+                    setAuthError("Use the Sign In form above with your real credentials.");
                   }}
                   className="mt-4 w-full text-center text-[10px] font-sans font-bold text-blue-600 hover:bg-blue-50/50 cursor-pointer bg-slate-50 rounded-xl py-2 px-3 border border-slate-100 transition"
                 >
