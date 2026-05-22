@@ -38,20 +38,39 @@ interface DriverPortalProps {
   setBookings?: React.Dispatch<React.SetStateAction<Booking[]>>;
   trips?: Trip[];
   setTrips?: React.Dispatch<React.SetStateAction<Trip[]>>;
+  expenses?: Expense[];
   settings?: AppSettings;
   setSettings?: React.Dispatch<React.SetStateAction<AppSettings>>;
+  // DB-backed mutation handlers passed from App
+  onAddBooking?: (b: Booking) => void;
+  onDeleteBooking?: (id: string) => void;
+  onUpdateBooking?: (b: Booking) => void;
+  onCompleteBooking?: (id: string, method: "cash" | "card") => void;
+  onSaveTrip?: (t: Trip) => void;
+  onDeleteTrip?: (id: string) => void;
+  onAddExpense?: (e: Expense) => void;
+  onDeleteExpense?: (id: string) => void;
 }
 
-export function DriverPortal({ 
+export function DriverPortal({
   onAddParsedBooking,
   bookings: propBookings,
   setBookings: propSetBookings,
   trips: propTrips,
   setTrips: propSetTrips,
+  expenses: propExpenses,
   settings: propSettings,
-  setSettings: propSetSettings
+  setSettings: propSetSettings,
+  onAddBooking,
+  onDeleteBooking,
+  onUpdateBooking,
+  onCompleteBooking,
+  onSaveTrip,
+  onDeleteTrip,
+  onAddExpense,
+  onDeleteExpense,
 }: DriverPortalProps) {
-  // 1. Core State Managers loaded securely via user local storage caches
+  // Fall back to local state when props not provided (standalone usage)
   const [localSettings, setLocalSettings] = useState<AppSettings>(() => {
     const cached = localStorage.getItem("farefreedom_settings_cache");
     return cached ? JSON.parse(cached) : DEFAULT_SETTINGS;
@@ -73,10 +92,11 @@ export function DriverPortal({
   const trips = propTrips || localTrips;
   const setTrips = propSetTrips || setLocalTrips;
 
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
+  const [localExpenses, setLocalExpenses] = useState<Expense[]>(() => {
     const cached = localStorage.getItem("farefreedom_expenses_cache");
     return cached ? JSON.parse(cached) : SEED_EXPENSES;
   });
+  const expenses = propExpenses || localExpenses;
 
   const [manualCustomers, setManualCustomers] = useState<Customer[]>(() => {
     const cached = localStorage.getItem("farefreedom_manual_customers_cache");
@@ -206,58 +226,62 @@ export function DriverPortal({
     return Array.from(baseMap.values());
   }, [bookings, trips, manualCustomers]);
 
-  // 4. Action Handlers safely referenced from subcomponents
+  // 4. Action Handlers — use DB-backed props when available, local state as fallback
   const handleAddNewBooking = (newB: Booking) => {
-    setBookings(prev => [newB, ...prev]);
+    if (onAddBooking) { onAddBooking(newB); }
+    else { setBookings(prev => [newB, ...prev]); }
   };
 
   const handleDeleteBooking = (id: string) => {
-    setBookings(prev => prev.filter(b => b.id !== id));
+    if (onDeleteBooking) { onDeleteBooking(id); }
+    else { setBookings(prev => prev.filter(b => b.id !== id)); }
   };
 
   const handleUpdateBooking = (updatedB: Booking) => {
-    setBookings(prev => prev.map(b => b.id === updatedB.id ? updatedB : b));
+    if (onUpdateBooking) { onUpdateBooking(updatedB); }
+    else { setBookings(prev => prev.map(b => b.id === updatedB.id ? updatedB : b)); }
   };
 
-  // Triggers when "Complete Job" sets cash/visa terminal pay
   const handleMoveBookingToTripHistory = (bookingId: string, paymentMethod: "cash" | "card") => {
-    const target = bookings.find(b => b.id === bookingId);
-    if (!target) return;
-
-    // Log new trip reference
-    const settledTrip: Trip = {
-      id: "trip-settled-" + Date.now(),
-      customerName: target.customerName,
-      pickupAddress: target.pickupAddress,
-      destinationAddress: target.destinationAddress,
-      distanceMiles: target.distanceMiles,
-      fareGbp: target.fareGbp,
-      paymentMethod,
-      dateTime: new Date().toISOString(), // Completed right now
-      mode: "Prebook"
-    };
-
-    setTrips(prev => [settledTrip, ...prev]);
-
-    // Deallocate booking
-    setBookings(prev => prev.filter(b => b.id !== bookingId));
+    if (onCompleteBooking) {
+      onCompleteBooking(bookingId, paymentMethod);
+    } else {
+      const target = bookings.find(b => b.id === bookingId);
+      if (!target) return;
+      const settledTrip: Trip = {
+        id: "trip-settled-" + Date.now(),
+        customerName: target.customerName,
+        pickupAddress: target.pickupAddress,
+        destinationAddress: target.destinationAddress,
+        distanceMiles: target.distanceMiles,
+        fareGbp: target.fareGbp,
+        paymentMethod,
+        dateTime: new Date().toISOString(),
+        mode: "Prebook",
+      };
+      setTrips(prev => [settledTrip, ...prev]);
+      setBookings(prev => prev.filter(b => b.id !== bookingId));
+    }
   };
 
-  // Save Trip logged from primary Taximeter state
   const handleSaveMeterTrip = (meterTrip: Trip) => {
-    setTrips(prev => [meterTrip, ...prev]);
+    if (onSaveTrip) { onSaveTrip(meterTrip); }
+    else { setTrips(prev => [meterTrip, ...prev]); }
   };
 
   const handleDeleteTrip = (tripId: string) => {
-    setTrips(prev => prev.filter(t => t.id !== tripId));
+    if (onDeleteTrip) { onDeleteTrip(tripId); }
+    else { setTrips(prev => prev.filter(t => t.id !== tripId)); }
   };
 
   const handleCreateNewExpense = (newExp: Expense) => {
-    setExpenses(prev => [newExp, ...prev]);
+    if (onAddExpense) { onAddExpense(newExp); }
+    else { setLocalExpenses(prev => [newExp, ...prev]); }
   };
 
   const handleDeleteExpense = (expId: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== expId));
+    if (onDeleteExpense) { onDeleteExpense(expId); }
+    else { setLocalExpenses(prev => prev.filter(e => e.id !== expId)); }
   };
 
   const handleCreateManualCustomer = (newCust: Customer) => {
