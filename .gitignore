@@ -6,10 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-
-# Android build artifacts (keep source, ignore generated outputs)
-android/.gradle/
-android/app/build/
-android/build/
-*.keystore
-*.jks
