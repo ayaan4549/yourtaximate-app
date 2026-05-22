@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "android": "npm run build && npx cap sync android && npx cap open android",
     "cap:sync": "npm run build && npx cap sync android",
-    "cap:copy": "npx cap copy android"
+    "cap:copy": "npx cap copy android",
+    "generate:assets": "node scripts/generate-assets.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
@@ -43,6 +44,7 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
